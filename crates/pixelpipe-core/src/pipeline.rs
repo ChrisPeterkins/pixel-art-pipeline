@@ -82,6 +82,7 @@ impl PipelineContext {
 
 /// Run the full pipeline with all phases.
 pub fn run_pipeline(config: Config, base_dir: PathBuf) -> Result<PipelineContext> {
+    use crate::animation::AnimationPhase;
     use crate::output::OutputPhase;
     use crate::packer::PackPhase;
     use crate::palette::PalettePhase;
@@ -92,7 +93,7 @@ pub fn run_pipeline(config: Config, base_dir: PathBuf) -> Result<PipelineContext
     let phases: Vec<Box<dyn PipelinePhase>> = vec![
         Box::new(PalettePhase),
         Box::new(PackPhase),
-        // Animation assembly (Milestone 5)
+        Box::new(AnimationPhase),
         Box::new(ScalePhase),
         Box::new(OutputPhase),
     ];
