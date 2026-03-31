@@ -1,0 +1,19 @@
+[package]
+name = "pixelpipe-gui"
+version = "0.1.0"
+edition = "2021"
+description = "GUI for the pixelpipe pixel art asset pipeline"
+
+[[bin]]
+name = "pixelpipe-gui"
+path = "src/main.rs"
+
+[dependencies]
+pixelpipe-core = { path = "../pixelpipe-core" }
+eframe = "0.31"
+egui = "0.31"
+image = "0.25"
+log = "0.4"
+env_logger = "0.11"
+rfd = "0.15"
+serde_yaml_ng = "0.10"

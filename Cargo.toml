@@ -2,6 +2,7 @@
 members = [
     "crates/pixelpipe-cli",
     "crates/pixelpipe-core",
+    "crates/pixelpipe-gui",
     "crates/pixelpipe-test-fixtures",
 ]
 resolver = "2"

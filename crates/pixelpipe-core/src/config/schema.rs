@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::path::PathBuf;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub project: ProjectConfig,
@@ -17,7 +17,7 @@ pub struct Config {
     pub animations: Vec<AnimationConfig>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectConfig {
     pub name: String,
@@ -35,7 +35,7 @@ fn default_input_dir() -> PathBuf {
     PathBuf::from("./raw")
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Defaults {
     #[serde(default = "default_scale_factors")]
@@ -83,7 +83,7 @@ fn default_true() -> bool {
 
 // ── Sprite Sheet Config ──────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SheetConfig {
     pub name: String,
@@ -109,7 +109,7 @@ pub enum OutputFormat {
 
 // ── Palette Config ───────────────────────────────────────────
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PalettesConfig {
     #[serde(default)]
@@ -118,7 +118,7 @@ pub struct PalettesConfig {
     pub operations: Vec<PaletteOperation>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PaletteDefinition {
     pub name: String,
@@ -127,7 +127,7 @@ pub struct PaletteDefinition {
     pub max_colors: Option<u32>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields, tag = "type")]
 pub enum PaletteOperation {
     #[serde(rename = "enforce")]
@@ -161,7 +161,7 @@ pub enum EnforceStrategy {
 
 // ── Scaling Config ───────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ScalingConfig {
     #[serde(default = "default_scale_factors")]
@@ -200,7 +200,7 @@ pub enum ScaleApplyTo {
 
 // ── Animation Config ─────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AnimationConfig {
     pub name: String,
@@ -210,7 +210,7 @@ pub struct AnimationConfig {
     pub scale_factors: Option<Vec<u32>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FrameSource {
     pub pattern: String,
@@ -229,14 +229,14 @@ pub enum SortOrder {
     Alphabetical,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TimingConfig {
     pub frame_duration_ms: Option<u32>,
     pub durations_ms: Option<Vec<u32>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AnimationOutput {
     #[serde(rename = "type")]
