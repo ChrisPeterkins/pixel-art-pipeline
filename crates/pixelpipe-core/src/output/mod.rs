@@ -1,3 +1,5 @@
+pub mod canvas;
+pub mod css;
 pub mod phaser;
 
 use crate::config::schema::OutputFormat;
@@ -21,9 +23,17 @@ impl PipelinePhase for OutputPhase {
         })?;
 
         if !ctx.scaled_sheets.is_empty() {
-            // Write scaled variants
+            // Collect all scale variant names per sheet for CSS retina queries
+            let mut scale_names_by_sheet: std::collections::HashMap<String, Vec<(u32, String)>> =
+                std::collections::HashMap::new();
             for scaled in &ctx.scaled_sheets {
-                // Find the matching sheet config for output formats
+                scale_names_by_sheet
+                    .entry(scaled.sheet_name.clone())
+                    .or_default()
+                    .push((scaled.scale_factor, format!("{}.png", scaled.name)));
+            }
+
+            for scaled in &ctx.scaled_sheets {
                 let sheet_config = ctx
                     .config
                     .sheets
@@ -46,7 +56,6 @@ impl PipelinePhase for OutputPhase {
                     })?;
                 log::info!("Wrote {}", png_path.display());
 
-                // Build a temporary SheetResult reference for serialization
                 let sheet_for_output = SheetResult {
                     image: scaled.image.clone(),
                     frames: scaled
@@ -64,17 +73,23 @@ impl PipelinePhase for OutputPhase {
                     height: scaled.height,
                 };
 
+                let all_scales = scale_names_by_sheet
+                    .get(&scaled.sheet_name)
+                    .cloned()
+                    .unwrap_or_default();
+
                 write_metadata(
                     &output_dir,
                     &scaled.name,
                     &png_name,
+                    &scaled.sheet_name,
                     &sheet_for_output,
                     scaled.scale_factor,
                     output_formats,
+                    &all_scales,
                 )?;
             }
         } else {
-            // No scaling configured — write base sheets directly
             for sheet_config in &ctx.config.sheets {
                 if let Some(sheet_result) = ctx.sheets.get(&sheet_config.name) {
                     let base_name = &sheet_config.name;
@@ -93,9 +108,11 @@ impl PipelinePhase for OutputPhase {
                         &output_dir,
                         base_name,
                         &png_name,
+                        base_name,
                         sheet_result,
                         1,
                         &sheet_config.output_formats,
+                        &[],
                     )?;
                 }
             }
@@ -109,9 +126,11 @@ fn write_metadata(
     output_dir: &Path,
     base_name: &str,
     png_name: &str,
+    sheet_name: &str,
     sheet: &SheetResult,
     scale: u32,
     formats: &[OutputFormat],
+    all_scale_names: &[(u32, String)],
 ) -> Result<()> {
     for format in formats {
         match format {
@@ -122,10 +141,17 @@ fn write_metadata(
                 log::info!("Wrote {}", json_path.display());
             }
             OutputFormat::Css => {
-                log::warn!("CSS output not yet implemented, skipping");
+                let css_content =
+                    css::serialize(sheet, png_name, sheet_name, scale, all_scale_names);
+                let css_path = output_dir.join(format!("{}.css", base_name));
+                write_string(&css_path, &css_content)?;
+                log::info!("Wrote {}", css_path.display());
             }
             OutputFormat::Canvas => {
-                log::warn!("Canvas JSON output not yet implemented, skipping");
+                let json = canvas::serialize(sheet, png_name);
+                let json_path = output_dir.join(format!("{}-canvas.json", base_name));
+                write_string(&json_path, &json)?;
+                log::info!("Wrote {}", json_path.display());
             }
         }
     }
