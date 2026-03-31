@@ -6,7 +6,8 @@ use crate::error::{PipelineError, Result};
 use crate::pipeline::{FramePlacement, PipelineContext, PipelinePhase, SheetResult};
 use image::RgbaImage;
 use maxrects::MaxRectsPacker;
-use std::path::Path;
+use rayon::prelude::*;
+use std::path::{Path, PathBuf};
 
 pub struct PackPhase;
 
@@ -41,24 +42,11 @@ fn pack_sheet(
     let resolve_dir = base_dir.join(input_dir);
     let files = resolve_input_files(&resolve_dir, &sheet.inputs)?;
 
-    // Load all input images
-    let mut sprites: Vec<(String, RgbaImage)> = Vec::new();
-    for file_path in &files {
-        let img = image::open(file_path)
-            .map_err(|e| PipelineError::Image {
-                path: file_path.clone(),
-                source: e,
-            })?
-            .to_rgba8();
-
-        let name = file_path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("unknown")
-            .to_string();
-
-        sprites.push((name, img));
-    }
+    // Load all input images in parallel
+    let sprites: Vec<(String, RgbaImage)> = files
+        .par_iter()
+        .map(|file_path| load_sprite(file_path))
+        .collect::<Result<Vec<_>>>()?;
 
     if sprites.is_empty() {
         return Err(PipelineError::Packing(format!(
@@ -114,4 +102,21 @@ fn pack_sheet(
         width: pack_result.width,
         height: pack_result.height,
     })
+}
+
+fn load_sprite(file_path: &PathBuf) -> Result<(String, RgbaImage)> {
+    let img = image::open(file_path)
+        .map_err(|e| PipelineError::Image {
+            path: file_path.clone(),
+            source: e,
+        })?
+        .to_rgba8();
+
+    let name = file_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("unknown")
+        .to_string();
+
+    Ok((name, img))
 }

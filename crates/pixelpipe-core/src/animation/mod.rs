@@ -22,14 +22,17 @@ impl PipelinePhase for AnimationPhase {
 
         let resolve_dir = ctx.base_dir.join(&ctx.config.project.input_dir);
         let output_dir = ctx.base_dir.join(&ctx.config.project.output_dir);
-        std::fs::create_dir_all(&output_dir).map_err(|e| PipelineError::Io {
-            path: output_dir.clone(),
-            source: e,
-        })?;
+        let dry_run = ctx.options.dry_run;
+        if !dry_run {
+            std::fs::create_dir_all(&output_dir).map_err(|e| PipelineError::Io {
+                path: output_dir.clone(),
+                source: e,
+            })?;
+        }
 
         for anim_config in &ctx.config.animations {
             log::info!("Assembling animation '{}'", anim_config.name);
-            let result = assemble_animation(anim_config, &resolve_dir, &output_dir)?;
+            let result = assemble_animation(anim_config, &resolve_dir, &output_dir, dry_run)?;
             ctx.animations
                 .insert(anim_config.name.clone(), result);
         }
@@ -42,6 +45,7 @@ fn assemble_animation(
     config: &AnimationConfig,
     resolve_dir: &Path,
     output_dir: &Path,
+    dry_run: bool,
 ) -> Result<AnimationResult> {
     // Load frames
     let mut frame_images = Vec::new();
@@ -95,23 +99,24 @@ fn assemble_animation(
                 let loop_anim = output.loop_animation.unwrap_or(true);
                 let gif_data = gif::encode_gif(&frame_images, &delays, loop_anim)?;
 
-                // Write GIF file
-                let gif_filename = output
-                    .output
-                    .clone()
-                    .unwrap_or_else(|| format!("{}.gif", config.name));
-                let gif_path = output_dir.join(&gif_filename);
-                if let Some(parent) = gif_path.parent() {
-                    std::fs::create_dir_all(parent).map_err(|e| PipelineError::Io {
-                        path: parent.to_path_buf(),
+                if !dry_run {
+                    let gif_filename = output
+                        .output
+                        .clone()
+                        .unwrap_or_else(|| format!("{}.gif", config.name));
+                    let gif_path = output_dir.join(&gif_filename);
+                    if let Some(parent) = gif_path.parent() {
+                        std::fs::create_dir_all(parent).map_err(|e| PipelineError::Io {
+                            path: parent.to_path_buf(),
+                            source: e,
+                        })?;
+                    }
+                    std::fs::write(&gif_path, &gif_data).map_err(|e| PipelineError::Io {
+                        path: gif_path.clone(),
                         source: e,
                     })?;
+                    log::info!("Wrote {}", gif_path.display());
                 }
-                std::fs::write(&gif_path, &gif_data).map_err(|e| PipelineError::Io {
-                    path: gif_path.clone(),
-                    source: e,
-                })?;
-                log::info!("Wrote {}", gif_path.display());
 
                 result.gif_data = Some(gif_data);
             }
@@ -123,45 +128,45 @@ fn assemble_animation(
 
                 let strip_image = strip::build_strip(&frame_images, &direction)?;
 
-                // Write strip PNG
-                let strip_filename = output
-                    .output
-                    .clone()
-                    .unwrap_or_else(|| format!("{}-strip.png", config.name));
-                let strip_path = output_dir.join(&strip_filename);
-                if let Some(parent) = strip_path.parent() {
-                    std::fs::create_dir_all(parent).map_err(|e| PipelineError::Io {
-                        path: parent.to_path_buf(),
-                        source: e,
-                    })?;
-                }
-                strip_image
-                    .save(&strip_path)
-                    .map_err(|e| PipelineError::Image {
-                        path: strip_path.clone(),
-                        source: e,
-                    })?;
-                log::info!("Wrote {}", strip_path.display());
+                if !dry_run {
+                    let strip_filename = output
+                        .output
+                        .clone()
+                        .unwrap_or_else(|| format!("{}-strip.png", config.name));
+                    let strip_path = output_dir.join(&strip_filename);
+                    if let Some(parent) = strip_path.parent() {
+                        std::fs::create_dir_all(parent).map_err(|e| PipelineError::Io {
+                            path: parent.to_path_buf(),
+                            source: e,
+                        })?;
+                    }
+                    strip_image
+                        .save(&strip_path)
+                        .map_err(|e| PipelineError::Image {
+                            path: strip_path.clone(),
+                            source: e,
+                        })?;
+                    log::info!("Wrote {}", strip_path.display());
 
-                // Write metadata JSON if requested
-                if output.metadata.unwrap_or(false) {
-                    let meta = strip::build_metadata(
-                        &strip_filename,
-                        frame_w,
-                        frame_h,
-                        frame_count,
-                        &direction,
-                        &delays,
-                    );
-                    let json = serde_json::to_string_pretty(&meta).map_err(|e| {
-                        PipelineError::Output(format!("JSON serialization failed: {}", e))
-                    })?;
-                    let json_path = strip_path.with_extension("json");
-                    std::fs::write(&json_path, &json).map_err(|e| PipelineError::Io {
-                        path: json_path.clone(),
-                        source: e,
-                    })?;
-                    log::info!("Wrote {}", json_path.display());
+                    if output.metadata.unwrap_or(false) {
+                        let meta = strip::build_metadata(
+                            &strip_filename,
+                            frame_w,
+                            frame_h,
+                            frame_count,
+                            &direction,
+                            &delays,
+                        );
+                        let json = serde_json::to_string_pretty(&meta).map_err(|e| {
+                            PipelineError::Output(format!("JSON serialization failed: {}", e))
+                        })?;
+                        let json_path = strip_path.with_extension("json");
+                        std::fs::write(&json_path, &json).map_err(|e| PipelineError::Io {
+                            path: json_path.clone(),
+                            source: e,
+                        })?;
+                        log::info!("Wrote {}", json_path.display());
+                    }
                 }
 
                 result.strip_image = Some(strip_image);

@@ -16,6 +16,11 @@ impl PipelinePhase for OutputPhase {
     }
 
     fn execute(&self, ctx: &mut PipelineContext) -> Result<()> {
+        if ctx.options.dry_run {
+            log::info!("Dry run: skipping file output");
+            return Ok(());
+        }
+
         let output_dir = ctx.base_dir.join(&ctx.config.project.output_dir);
         fs::create_dir_all(&output_dir).map_err(|e| PipelineError::Io {
             path: output_dir.clone(),
