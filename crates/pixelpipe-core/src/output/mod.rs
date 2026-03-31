@@ -2,7 +2,7 @@ pub mod phaser;
 
 use crate::config::schema::OutputFormat;
 use crate::error::{PipelineError, Result};
-use crate::pipeline::{PipelineContext, PipelinePhase};
+use crate::pipeline::{FramePlacement, PipelineContext, PipelinePhase, SheetResult};
 use std::fs;
 use std::path::Path;
 
@@ -20,15 +20,24 @@ impl PipelinePhase for OutputPhase {
             source: e,
         })?;
 
-        // Write sprite sheets
-        for sheet_config in &ctx.config.sheets {
-            if let Some(sheet_result) = ctx.sheets.get(&sheet_config.name) {
-                let base_name = &sheet_config.name;
+        if !ctx.scaled_sheets.is_empty() {
+            // Write scaled variants
+            for scaled in &ctx.scaled_sheets {
+                // Find the matching sheet config for output formats
+                let sheet_config = ctx
+                    .config
+                    .sheets
+                    .iter()
+                    .find(|s| s.name == scaled.sheet_name);
 
-                // Write the atlas PNG
-                let png_name = format!("{}.png", base_name);
+                let output_formats = match sheet_config {
+                    Some(cfg) => &cfg.output_formats,
+                    None => continue,
+                };
+
+                let png_name = format!("{}.png", scaled.name);
                 let png_path = output_dir.join(&png_name);
-                sheet_result
+                scaled
                     .image
                     .save(&png_path)
                     .map_err(|e| PipelineError::Image {
@@ -37,30 +46,90 @@ impl PipelinePhase for OutputPhase {
                     })?;
                 log::info!("Wrote {}", png_path.display());
 
-                // Write metadata in each requested format
-                for format in &sheet_config.output_formats {
-                    match format {
-                        OutputFormat::Phaser => {
-                            let json = phaser::serialize(sheet_result, &png_name);
-                            let json_path = output_dir.join(format!("{}.json", base_name));
-                            write_string(&json_path, &json)?;
-                            log::info!("Wrote {}", json_path.display());
-                        }
-                        OutputFormat::Css => {
-                            // CSS output will be implemented in Milestone 6
-                            log::warn!("CSS output not yet implemented, skipping");
-                        }
-                        OutputFormat::Canvas => {
-                            // Canvas output will be implemented in Milestone 6
-                            log::warn!("Canvas JSON output not yet implemented, skipping");
-                        }
-                    }
+                // Build a temporary SheetResult reference for serialization
+                let sheet_for_output = SheetResult {
+                    image: scaled.image.clone(),
+                    frames: scaled
+                        .frames
+                        .iter()
+                        .map(|f| FramePlacement {
+                            name: f.name.clone(),
+                            x: f.x,
+                            y: f.y,
+                            width: f.width,
+                            height: f.height,
+                        })
+                        .collect(),
+                    width: scaled.width,
+                    height: scaled.height,
+                };
+
+                write_metadata(
+                    &output_dir,
+                    &scaled.name,
+                    &png_name,
+                    &sheet_for_output,
+                    scaled.scale_factor,
+                    output_formats,
+                )?;
+            }
+        } else {
+            // No scaling configured — write base sheets directly
+            for sheet_config in &ctx.config.sheets {
+                if let Some(sheet_result) = ctx.sheets.get(&sheet_config.name) {
+                    let base_name = &sheet_config.name;
+                    let png_name = format!("{}.png", base_name);
+                    let png_path = output_dir.join(&png_name);
+                    sheet_result
+                        .image
+                        .save(&png_path)
+                        .map_err(|e| PipelineError::Image {
+                            path: png_path.clone(),
+                            source: e,
+                        })?;
+                    log::info!("Wrote {}", png_path.display());
+
+                    write_metadata(
+                        &output_dir,
+                        base_name,
+                        &png_name,
+                        sheet_result,
+                        1,
+                        &sheet_config.output_formats,
+                    )?;
                 }
             }
         }
 
         Ok(())
     }
+}
+
+fn write_metadata(
+    output_dir: &Path,
+    base_name: &str,
+    png_name: &str,
+    sheet: &SheetResult,
+    scale: u32,
+    formats: &[OutputFormat],
+) -> Result<()> {
+    for format in formats {
+        match format {
+            OutputFormat::Phaser => {
+                let json = phaser::serialize(sheet, png_name, scale);
+                let json_path = output_dir.join(format!("{}.json", base_name));
+                write_string(&json_path, &json)?;
+                log::info!("Wrote {}", json_path.display());
+            }
+            OutputFormat::Css => {
+                log::warn!("CSS output not yet implemented, skipping");
+            }
+            OutputFormat::Canvas => {
+                log::warn!("Canvas JSON output not yet implemented, skipping");
+            }
+        }
+    }
+    Ok(())
 }
 
 fn write_string(path: &Path, content: &str) -> Result<()> {

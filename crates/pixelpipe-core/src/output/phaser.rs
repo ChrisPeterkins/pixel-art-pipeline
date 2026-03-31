@@ -44,7 +44,7 @@ struct PhaserMeta {
 }
 
 /// Serialize a SheetResult into Phaser 3 JSON Hash format.
-pub fn serialize(sheet: &SheetResult, image_filename: &str) -> String {
+pub fn serialize(sheet: &SheetResult, image_filename: &str, scale: u32) -> String {
     let mut frames = BTreeMap::new();
 
     for frame in &sheet.frames {
@@ -85,7 +85,7 @@ pub fn serialize(sheet: &SheetResult, image_filename: &str) -> String {
                 w: sheet.width,
                 h: sheet.height,
             },
-            scale: 1,
+            scale,
         },
     };
 
@@ -122,7 +122,7 @@ mod tests {
             height: 64,
         };
 
-        let json = serialize(&sheet, "sprites.png");
+        let json = serialize(&sheet, "sprites.png", 1);
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         // Check frames exist

@@ -166,3 +166,101 @@ sheets:
     // Cleanup
     let _ = fs::remove_dir_all(&base);
 }
+
+#[test]
+fn test_multi_resolution_output() {
+    let base = std::env::temp_dir()
+        .join("pixelpipe-tests")
+        .join("multi_res");
+    let _ = fs::remove_dir_all(&base);
+    fs::create_dir_all(&base).unwrap();
+
+    let input_dir = base.join("raw").join("sprites");
+    fs::create_dir_all(&input_dir).unwrap();
+
+    // Create a simple 8x8 red sprite
+    let img = solid_image(8, 8, [255, 0, 0, 255]);
+    img.save(input_dir.join("red.png")).unwrap();
+
+    let output_dir = base.join("dist");
+    let config_yaml = format!(
+        r#"
+project:
+  name: "multi-res-test"
+  input_dir: "./raw"
+  output_dir: "{}"
+
+defaults:
+  padding: 0
+  power_of_two: false
+
+sheets:
+  - name: "icons"
+    inputs: ["sprites/*.png"]
+    output_formats: ["phaser"]
+
+scaling:
+  factors: [1, 2, 4]
+  naming: "{{name}}@{{scale}}x"
+  apply_to: "sheets"
+"#,
+        output_dir.display()
+    );
+
+    let config_path = base.join("pixelpipe.yaml");
+    fs::write(&config_path, &config_yaml).unwrap();
+
+    let cfg = config::load_config(&config_path).unwrap();
+    let ctx = pipeline::run_pipeline(cfg, base.clone()).unwrap();
+
+    // Should have 3 scaled variants
+    assert_eq!(ctx.scaled_sheets.len(), 3);
+
+    // Verify output files for each scale
+    for factor in &[1u32, 2, 4] {
+        let name = format!("icons@{}x", factor);
+        let png_path = output_dir.join(format!("{}.png", name));
+        let json_path = output_dir.join(format!("{}.json", name));
+
+        assert!(png_path.exists(), "Missing {}.png", name);
+        assert!(json_path.exists(), "Missing {}.json", name);
+
+        // Verify image dimensions
+        let atlas = image::open(&png_path).unwrap().to_rgba8();
+        assert_eq!(atlas.width(), 8 * factor, "Wrong width for @{}x", factor);
+        assert_eq!(atlas.height(), 8 * factor, "Wrong height for @{}x", factor);
+
+        // Verify JSON scale field
+        let json_str = fs::read_to_string(&json_path).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(json["meta"]["scale"], *factor, "Wrong scale in JSON for @{}x", factor);
+        assert_eq!(
+            json["meta"]["size"]["w"],
+            8 * factor,
+            "Wrong meta.size.w for @{}x",
+            factor
+        );
+
+        // Verify frame coordinates are scaled
+        let frame = &json["frames"]["red.png"]["frame"];
+        assert_eq!(frame["w"], 8 * factor, "Wrong frame width for @{}x", factor);
+        assert_eq!(frame["h"], 8 * factor, "Wrong frame height for @{}x", factor);
+
+        // Verify pixel accuracy at each scale — every pixel should be red
+        for y in 0..atlas.height() {
+            for x in 0..atlas.width() {
+                assert_eq!(
+                    atlas.get_pixel(x, y).0,
+                    [255, 0, 0, 255],
+                    "Pixel mismatch at ({}, {}) in @{}x atlas",
+                    x,
+                    y,
+                    factor
+                );
+            }
+        }
+    }
+
+    // Cleanup
+    let _ = fs::remove_dir_all(&base);
+}

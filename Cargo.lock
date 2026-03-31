@@ -819,6 +819,7 @@ dependencies = [
  "clap",
  "colored",
  "env_logger",
+ "image",
  "log",
  "pixelpipe-core",
 ]
