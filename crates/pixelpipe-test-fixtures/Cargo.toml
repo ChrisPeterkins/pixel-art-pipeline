@@ -1,0 +1,8 @@
+[package]
+name = "pixelpipe-test-fixtures"
+version = "0.1.0"
+edition = "2021"
+description = "Test fixtures for the pixelpipe asset pipeline"
+
+[dependencies]
+image = "0.25"
